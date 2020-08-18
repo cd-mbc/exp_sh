@@ -53,6 +53,8 @@ class PaceMaker {
     virtual void impeach() {}
     virtual void on_consensus(const block_t &) {}
     virtual size_t get_pending_size() = 0;
+
+    bool is_first_propose = true;
 };
 
 using pacemaker_bt = BoxObj<PaceMaker>;
@@ -263,16 +265,25 @@ class PMRoundRobinProposer: virtual public PaceMaker {
     }
 
     void proposer_schedule_next() {
-        if (!pending_beats.empty() && !locked)
+        if (!locked)
         {
-            auto pm = pending_beats.front();
-            pending_beats.pop();
-            pm_qc_finish.reject();
-            (pm_qc_finish = hsc->async_qc_finish(last_proposed))
-                .then([this, pm]() {
-                    HOTSTUFF_LOG_PROTO("got QC, propose a new block");
-                    pm.resolve(proposer);
-                });
+            if (!pending_beats.empty()) {
+                auto pm = pending_beats.front();
+                pending_beats.pop();
+                pm_qc_finish.reject();
+                (pm_qc_finish = hsc->async_qc_finish(last_proposed))
+                    .then([this, pm]() {
+                        HOTSTUFF_LOG_PROTO("got QC, propose a new block");
+                        if (is_first_propose)
+                            pm.resolve(proposer);
+                    });
+            } else if (!is_first_propose) {
+                (pm_qc_finish = hsc->async_qc_finish(last_proposed))
+                    .then([this]() {
+                        std::vector<uint256_t> cmds;
+                        hsc->on_propose(cmds, get_parents());
+                    });                
+            }
             locked = true;
         }
     }
@@ -379,6 +390,7 @@ class PMRoundRobinProposer: virtual public PaceMaker {
 
     void init() {
         exp_timeout = base_timeout;
+        proposer = 0;
         stop_rotate();
     }
 

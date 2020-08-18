@@ -21,6 +21,7 @@
 #include <cassert>
 #include <set>
 #include <unordered_map>
+#include <queue>
 
 #include "hotstuff/promise.hpp"
 #include "hotstuff/type.h"
@@ -70,6 +71,10 @@ class HotStuffCore {
     /** always vote negatively, useful for some PaceMakers */
     bool vote_disabled;
 
+    public: std::queue<uint256_t> cmd_pool;
+    int blk_size;
+    std::unordered_map<const uint256_t, bool> decided_cmds;    
+
     block_t get_delivered_blk(const uint256_t &blk_hash);
     void sanity_check_delivered(const block_t &blk);
     void check_commit(const block_t &_hqc);
@@ -90,7 +95,7 @@ class HotStuffCore {
     public:
     BoxObj<EntityStorage> storage;
 
-    HotStuffCore(ReplicaID id, privkey_bt &&priv_key);
+    HotStuffCore(ReplicaID id, privkey_bt &&priv_key, int blk_size);
     virtual ~HotStuffCore() {
         b0->qc_ref = nullptr;
     }

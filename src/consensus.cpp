@@ -31,7 +31,8 @@ namespace hotstuff {
 /* The core logic of HotStuff, is fairly simple :). */
 /*** begin HotStuff protocol logic ***/
 HotStuffCore::HotStuffCore(ReplicaID id,
-                            privkey_bt &&priv_key):
+                            privkey_bt &&priv_key,
+                            int blk_size):
         b0(new Block(true, 1)),
         b_exec(b0),
         vheight(0),
@@ -42,6 +43,7 @@ HotStuffCore::HotStuffCore(ReplicaID id,
         tails{b0},
         vote_disabled(false),
         id(id),
+        blk_size(blk_size),
         storage(new EntityStorage()) {
     storage->add_blk(b0);
 }
@@ -171,10 +173,24 @@ block_t HotStuffCore::on_propose(const std::vector<uint256_t> &cmds,
     }
     if (parents.empty())
         throw std::runtime_error("empty parents");
+
+    std::vector<uint256_t> p_cmds;
+    int cmd_pool_size = cmd_pool.size();
+    for(int i = 0; i < cmd_pool_size; i++){
+        uint256_t cmd_hash = cmd_pool.front();
+        if (decided_cmds.find(cmd_hash) == decided_cmds.end()){
+            p_cmds.push_back(cmd_hash);
+        }
+        cmd_pool.pop();
+        if (p_cmds.size() >= blk_size){ 
+            break;
+        }
+    }
+
     for (const auto &_: parents) tails.erase(_);
     /* create the new block */
     block_t bnew = storage->add_blk(
-        new Block(parents, cmds,
+        new Block(parents, p_cmds,
             hqc.second->clone(), std::move(extra),
             parents[0]->height + 1,
             hqc.first,
